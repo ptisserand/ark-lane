@@ -151,7 +151,134 @@ contract BridgeTest is Test, IStarklaneEvent {
         // TODO: test event emission to verify the request.
     }
 
-    // Test a withdraw auto that will trigger the deploy of a new collection on L1.
+    function test_depositTokenERC721_notEnabled() public {
+        IStarklane(bridge).enableBridge(false);
+
+        IERC721MintRangeFree(erc721C1).mintRangeFree(alice, 0, 10);
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = 0;
+        ids[1] = 9;
+
+        uint256 salt = 0x1;
+        snaddress to = Cairo.snaddressWrap(0x1);
+
+        vm.startPrank(alice);
+        IERC721(erc721C1).setApprovalForAll(address(bridge), true);
+        vm.expectRevert(BridgeNotEnabledError.selector);
+        IStarklane(bridge).depositTokens{value: 30000}(
+            salt,
+            address(erc721C1),
+            to,
+            ids,
+            false
+        );
+        vm.stopPrank();
+    }
+
+    function test_depositTokenERC721_notWhiteListed() public {
+        IERC721MintRangeFree(erc721C1).mintRangeFree(alice, 0, 10);
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = 0;
+        ids[1] = 9;
+
+        uint256 salt = 0x1;
+        snaddress to = Cairo.snaddressWrap(0x1);
+
+        IStarklane(bridge).enableWhiteList(true);
+
+        vm.startPrank(alice);
+        IERC721(erc721C1).setApprovalForAll(address(bridge), true);
+        
+        vm.expectRevert(NotWhiteListedError.selector);
+        IStarklane(bridge).depositTokens{value: 30000}(
+            salt,
+            address(erc721C1),
+            to,
+            ids,
+            false
+        );
+        vm.stopPrank();
+    }
+
+    function test_depositTokenERC721_whiteListed() public {
+        IERC721MintRangeFree(erc721C1).mintRangeFree(alice, 0, 10);
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = 0;
+        ids[1] = 9;
+
+        uint256 salt = 0x1;
+        snaddress to = Cairo.snaddressWrap(0x1);
+
+        IStarklane(bridge).enableWhiteList(false);
+
+        IStarklane(bridge).whiteList(erc721C1, true);
+
+        vm.startPrank(alice);
+        IERC721(erc721C1).setApprovalForAll(address(bridge), true);
+        
+        IStarklane(bridge).depositTokens{value: 30000}(
+            salt,
+            address(erc721C1),
+            to,
+            ids,
+            false
+        );
+        vm.stopPrank();
+    }
+
+    // Test event related to whitelist
+    function test_events_whiteList() public {
+        vm.expectEmit(bridge);
+        emit WhiteListUpdated(false);
+        IStarklane(bridge).enableWhiteList(false);
+
+        vm.expectEmit(bridge);
+        emit WhiteListUpdated(true);
+        IStarklane(bridge).enableWhiteList(true);
+
+        vm.expectEmit(bridge);
+        emit CollectionWhiteListUpdated(erc721C1, true);
+        IStarklane(bridge).whiteList(erc721C1, true);
+
+        vm.expectEmit(bridge);
+        emit CollectionWhiteListUpdated(erc721C1, false);
+        IStarklane(bridge).whiteList(erc721C1, false);
+
+    }
+
+    function test_isWhiteListEnabled() public {
+        IStarklane(bridge).enableWhiteList(false);
+        assert(!IStarklane(bridge).isWhiteListEnabled());
+
+        IStarklane(bridge).enableWhiteList(true);
+        assert(IStarklane(bridge).isWhiteListEnabled());
+
+        IStarklane(bridge).whiteList(erc721C1, true);
+        assert(IStarklane(bridge).isWhiteListed(erc721C1));
+        
+        IStarklane(bridge).whiteList(erc721C1, false);
+        assert(!IStarklane(bridge).isWhiteListed(erc721C1));
+    }
+
+    function test_getWhiteListedCollections() public {
+        address[] memory whiteListed = IStarklane(bridge).getWhiteListedCollections();
+        assertEq(whiteListed.length, 0);
+
+        IStarklane(bridge).whiteList(erc721C1, true);
+        IStarklane(bridge).whiteList(erc1155C1, true);
+        whiteListed = IStarklane(bridge).getWhiteListedCollections();
+        assertEq(whiteListed.length, 2);
+
+        IStarklane(bridge).whiteList(erc1155C1, false);
+        whiteListed = IStarklane(bridge).getWhiteListedCollections();
+        assertEq(whiteListed.length, 1);
+    }
+
+    // Audit:
+    // [C-01] Anyone can withdraw any token held by the L1 bridge
     function test_withdrawTokensERC721AutoWithdrawDeploy() public {
         // Build the request and compute it's "would be" message hash.
         felt252 header = Protocol.requestHeaderV1(CollectionType.ERC721, false, true);
