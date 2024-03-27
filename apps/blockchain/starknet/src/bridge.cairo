@@ -14,7 +14,7 @@ mod bridge {
     use starknet::contract_address::ContractAddressZeroable;
     use starknet::eth_address::EthAddressZeroable;
 
-    use starklane::interfaces::{IStarklane, IUpgradeable};
+    use starklane::interfaces::{IStarklane, IUpgradeable, IUpgradeableDispatcher, IUpgradeableDispatcherTrait, IStarklaneCollectionAdmin};
     // events
     use starklane::interfaces::{
         DepositRequestInitiated,
@@ -79,7 +79,7 @@ mod bridge {
         self.bridge_l1_address.write(bridge_l1_address);
         self.erc721_bridgeable_class.write(erc721_bridgeable_class);
         self.white_list_enabled.write(false);
-        self.enabled.write(false); // disalbed by default
+        self.enabled.write(false); // disabled by default
     }
 
     #[event]
@@ -118,7 +118,7 @@ mod bridge {
 
         let collection_l2 = ensure_erc721_deployment(ref self, @req);
 
-        let ctype = collection_type_from_header(req.header);
+        let _ctype = collection_type_from_header(req.header);
         // TODO: check CollectionType to support ERC1155 + metadata.
 
         let mut i = 0;
@@ -158,7 +158,7 @@ mod bridge {
         });
     }
 
-    #[external(v0)]
+    #[abi(embed_v0)]
     impl BridgeUpgradeImpl of IUpgradeable<ContractState> {
         fn upgrade(ref self: ContractState, class_hash: ClassHash) {
             assert(
@@ -178,7 +178,7 @@ mod bridge {
         }
     }
 
-    #[external(v0)]
+    #[abi(embed_v0)]
     impl BridgeImpl of IStarklane<ContractState> {
 
         fn get_l1_collection_address(self: @ContractState, address: ContractAddress) -> EthAddress {
@@ -316,6 +316,24 @@ mod bridge {
         fn is_enabled(self: @ContractState) -> bool {
             self.enabled.read()
         }
+
+        fn set_l1_l2_collection_mapping(ref self: ContractState, collection_l1: EthAddress, collection_l2: ContractAddress) {
+            ensure_is_admin(@self);
+            self.l1_to_l2_addresses.write(collection_l1, collection_l2);
+            self.l2_to_l1_addresses.write(collection_l2, collection_l1);
+        }
+    }
+
+    #[abi(embed_v0)]
+    impl BridgeCollectionAdminImpl of IStarklaneCollectionAdmin<ContractState> {
+        fn collection_upgrade(ref self: ContractState, collection: ContractAddress, class_hash: ClassHash) {
+            assert(
+                starknet::get_caller_address() == self.bridge_admin.read(),
+                'Unauthorized replace class'
+            );
+            IUpgradeableDispatcher { contract_address: collection }
+                .upgrade(class_hash);
+        }
     }
 
     // *** INTERNALS ***
@@ -388,6 +406,7 @@ mod bridge {
             salt,
             req.name.clone(),
             req.symbol.clone(),
+            req.base_uri.clone(),
             starknet::get_contract_address(),
         );
 

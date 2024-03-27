@@ -58,8 +58,8 @@ contract Starklane is IStarklaneEvent, UUPSOwnableProxied, StarklaneState, Stark
 
         _transferOwnership(owner);
 
-        setStarklaneL2Address(Cairo.snaddressWrap(starklaneL2Address));
-        setStarklaneL2Selector(Cairo.felt252Wrap(starklaneL2Selector));
+        setStarklaneL2Address(starklaneL2Address);
+        setStarklaneL2Selector(starklaneL2Selector);
     }
 
     /**
@@ -82,6 +82,9 @@ contract Starklane is IStarklaneEvent, UUPSOwnableProxied, StarklaneState, Stark
         external
         payable
     {
+        if (!Cairo.isFelt252(snaddress.unwrap(ownerL2))) {
+            revert CairoWrapError();
+        }
         if (!_enabled) {
             revert BridgeNotEnabledError();
         }
@@ -159,7 +162,9 @@ contract Starklane is IStarklaneEvent, UUPSOwnableProxied, StarklaneState, Stark
         // Any error or permission fail in the message consumption will cause a revert.
         // After message being consumed, it is considered legit and tokens can be withdrawn.
         if (Protocol.canUseWithdrawAuto(header)) {
-            _consumeMessageAutoWithdraw(_starklaneL2Address, request);
+            // 2024-03-19: disabled autoWithdraw after audit report
+            // _consumeMessageAutoWithdraw(_starklaneL2Address, request);
+            revert NotSupportedYetError();
         } else {
             _consumeMessageStarknet(_starknetCoreAddress, _starklaneL2Address, request);
         }
@@ -179,7 +184,7 @@ contract Starklane is IStarklaneEvent, UUPSOwnableProxied, StarklaneState, Stark
                     req.hash
                 );
             } else {
-                // TODO ERC1155.
+                revert NotSupportedYetError();
             }
         }
 
@@ -348,4 +353,14 @@ contract Starklane is IStarklaneEvent, UUPSOwnableProxied, StarklaneState, Stark
     function isEnabled() external view returns(bool) {
         return _enabled;
     }
+
+    function setL1L2CollectionMapping(
+        address collectionL1,
+        snaddress collectionL2,
+        bool force
+    ) external onlyOwner {
+        _setL1L2AddressMapping(collectionL1, collectionL2, force);
+        emit L1L2CollectionMappingUpdated(collectionL1, snaddress.unwrap(collectionL2));
+    }
+
 }

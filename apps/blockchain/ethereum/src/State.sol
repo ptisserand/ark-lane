@@ -40,12 +40,12 @@ contract StarklaneState is Ownable {
        @param l2Address Starklane L2 address.
     */
     function setStarklaneL2Address(
-        snaddress l2Address
+        uint256 l2Address
     )
         public
         onlyOwner
     {
-        _starklaneL2Address = l2Address;
+        _starklaneL2Address = Cairo.snaddressWrap(l2Address);
     }
 
     /**
@@ -55,12 +55,12 @@ contract StarklaneState is Ownable {
        @param l2Selector Starklane L2 selector.
     */
     function setStarklaneL2Selector(
-        felt252 l2Selector
+        uint256 l2Selector
     )
         public
         onlyOwner
     {
-        _starklaneL2Selector = l2Selector;
+        _starklaneL2Selector = Cairo.felt252Wrap(l2Selector);
     }
 
 

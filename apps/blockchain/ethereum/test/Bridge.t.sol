@@ -110,6 +110,22 @@ contract BridgeTest is Test, IStarklaneEvent {
         );
     }
 
+    function test_L2OwnerOverflow() public {
+        uint256[] memory ids = new uint256[](0);
+
+        uint256 salt = 0x0;
+        snaddress to = snaddress.wrap(SN_MODULUS);
+
+        vm.expectRevert(CairoWrapError.selector);
+        IStarklane(bridge).depositTokens{value: 30000}(
+            salt,
+            address(erc721C1),
+            to,
+            ids,
+            false
+        );
+    }
+
     //
     function test_depositTokenERC721() public {
         IERC721MintRangeFree(erc721C1).mintRangeFree(alice, 0, 10);
@@ -135,132 +151,6 @@ contract BridgeTest is Test, IStarklaneEvent {
         // TODO: test event emission to verify the request.
     }
 
-    function test_depositTokenERC721_notEnabled() public {
-        IStarklane(bridge).enableBridge(false);
-
-        IERC721MintRangeFree(erc721C1).mintRangeFree(alice, 0, 10);
-
-        uint256[] memory ids = new uint256[](2);
-        ids[0] = 0;
-        ids[1] = 9;
-
-        uint256 salt = 0x1;
-        snaddress to = Cairo.snaddressWrap(0x1);
-
-        vm.startPrank(alice);
-        IERC721(erc721C1).setApprovalForAll(address(bridge), true);
-        vm.expectRevert(BridgeNotEnabledError.selector);
-        IStarklane(bridge).depositTokens{value: 30000}(
-            salt,
-            address(erc721C1),
-            to,
-            ids,
-            false
-        );
-        vm.stopPrank();
-    }
-
-    function test_depositTokenERC721_notWhiteListed() public {
-        IERC721MintRangeFree(erc721C1).mintRangeFree(alice, 0, 10);
-
-        uint256[] memory ids = new uint256[](2);
-        ids[0] = 0;
-        ids[1] = 9;
-
-        uint256 salt = 0x1;
-        snaddress to = Cairo.snaddressWrap(0x1);
-
-        IStarklane(bridge).enableWhiteList(true);
-
-        vm.startPrank(alice);
-        IERC721(erc721C1).setApprovalForAll(address(bridge), true);
-        
-        vm.expectRevert(NotWhiteListedError.selector);
-        IStarklane(bridge).depositTokens{value: 30000}(
-            salt,
-            address(erc721C1),
-            to,
-            ids,
-            false
-        );
-        vm.stopPrank();
-    }
-
-    function test_depositTokenERC721_whiteListed() public {
-        IERC721MintRangeFree(erc721C1).mintRangeFree(alice, 0, 10);
-
-        uint256[] memory ids = new uint256[](2);
-        ids[0] = 0;
-        ids[1] = 9;
-
-        uint256 salt = 0x1;
-        snaddress to = Cairo.snaddressWrap(0x1);
-
-        IStarklane(bridge).enableWhiteList(false);
-
-        IStarklane(bridge).whiteList(erc721C1, true);
-
-        vm.startPrank(alice);
-        IERC721(erc721C1).setApprovalForAll(address(bridge), true);
-        
-        IStarklane(bridge).depositTokens{value: 30000}(
-            salt,
-            address(erc721C1),
-            to,
-            ids,
-            false
-        );
-        vm.stopPrank();
-    }
-
-    // Test event related to whitelist
-    function test_events_whiteList() public {
-        vm.expectEmit(bridge);
-        emit WhiteListUpdated(false);
-        IStarklane(bridge).enableWhiteList(false);
-
-        vm.expectEmit(bridge);
-        emit WhiteListUpdated(true);
-        IStarklane(bridge).enableWhiteList(true);
-
-        vm.expectEmit(bridge);
-        emit CollectionWhiteListUpdated(erc721C1, true);
-        IStarklane(bridge).whiteList(erc721C1, true);
-
-        vm.expectEmit(bridge);
-        emit CollectionWhiteListUpdated(erc721C1, false);
-        IStarklane(bridge).whiteList(erc721C1, false);
-
-    }
-
-    function test_isWhiteListEnabled() public {
-        IStarklane(bridge).enableWhiteList(false);
-        assert(!IStarklane(bridge).isWhiteListEnabled());
-
-        IStarklane(bridge).enableWhiteList(true);
-        assert(IStarklane(bridge).isWhiteListEnabled());
-
-        IStarklane(bridge).whiteList(erc721C1, true);
-        assert(IStarklane(bridge).isWhiteListed(erc721C1));
-        
-        IStarklane(bridge).whiteList(erc721C1, false);
-        assert(!IStarklane(bridge).isWhiteListed(erc721C1));
-    }
-
-    function test_getWhiteListedCollections() public {
-        address[] memory whiteListed = IStarklane(bridge).getWhiteListedCollections();
-        assertEq(whiteListed.length, 0);
-
-        IStarklane(bridge).whiteList(erc721C1, true);
-        IStarklane(bridge).whiteList(erc1155C1, true);
-        whiteListed = IStarklane(bridge).getWhiteListedCollections();
-        assertEq(whiteListed.length, 2);
-
-        IStarklane(bridge).whiteList(erc1155C1, false);
-        whiteListed = IStarklane(bridge).getWhiteListedCollections();
-        assertEq(whiteListed.length, 1);
-    }
-
     // Test a withdraw auto that will trigger the deploy of a new collection on L1.
     function test_withdrawTokensERC721AutoWithdrawDeploy() public {
         // Build the request and compute it's "would be" message hash.
@@ -273,17 +163,11 @@ contract BridgeTest is Test, IStarklaneEvent {
         // as QUICK message.
 
         IStarklane(bridge).addMessageHashForAutoWithdraw(uint256(msgHash));
-        address collection = IStarklane(bridge).withdrawTokens(reqSerialized);
-
-        // TODO: add verification of event emission.
-
-        assertEq(IERC721(collection).ownerOf(888), bob);
-
-        vm.expectRevert();
+        vm.expectRevert(NotSupportedYetError.selector);
         IStarklane(bridge).withdrawTokens(reqSerialized);
     }
 
-    // Test a withdraw STARKNET that will trigger the deploy of a new collection on L1.
+    // Test a withdraw STARKNET that will trigger the deploy of a new collection on L1.'0x800000000000011000000000000000000000000000000000000000000000001'
     function test_withdrawTokensERC721StarknetWithdrawDeploy() public {
         // Build the request and compute it's "would be" message hash.
         felt252 header = Protocol.requestHeaderV1(CollectionType.ERC721, false, false);
@@ -301,6 +185,100 @@ contract BridgeTest is Test, IStarklaneEvent {
         // TODO: add verification of event emission.
 
         assertEq(IERC721(collection).ownerOf(888), bob);
+
+        // Error message from Starknet Core expected.
+        vm.expectRevert(bytes("INVALID_MESSAGE_TO_CONSUME"));
+        IStarklane(bridge).withdrawTokens(reqSerialized);
+    }
+
+    // Audit:
+    // [C-02] Impossible to withdraw L1 native tokens back on L1 after bridging to L2. Also, a different collection address will be generated for every native l2 token bridged to l1
+    function test_withdrawTokensERC721StarknetWithdrawDeploySameCollection() public {
+        // Build the request and compute it's "would be" message hash.
+        felt252 header = Protocol.requestHeaderV1(CollectionType.ERC721, false, false);
+        Request memory req = buildRequestDeploy(header, 888, bob);
+        uint256[] memory reqSerialized = Protocol.requestSerialize(req);
+        bytes32 msgHash = computeMessageHashFromL2(reqSerialized);
+
+        // The message must be simulated to come from starknet verifier contract
+        // on L1 and pushed to starknet core.
+        uint256[] memory msgHashes = new uint256[](1);
+        msgHashes[0] = uint256(msgHash);
+        IStarknetMessagingLocal(snCore).addMessageHashesFromL2(msgHashes);
+        address collection1 = IStarklane(bridge).withdrawTokens(reqSerialized);
+
+        assertEq(IERC721(collection1).ownerOf(888), bob);
+        // Error message from Starknet Core expected.
+        vm.expectRevert(bytes("INVALID_MESSAGE_TO_CONSUME"));
+        IStarklane(bridge).withdrawTokens(reqSerialized);
+
+        req.tokenIds[0] = 777;
+        reqSerialized = Protocol.requestSerialize(req);
+        msgHash = computeMessageHashFromL2(reqSerialized);
+
+        msgHashes[0] = uint256(msgHash);
+        IStarknetMessagingLocal(snCore).addMessageHashesFromL2(msgHashes);
+        address collection2 = IStarklane(bridge).withdrawTokens(reqSerialized);
+
+        assertEq(IERC721(collection2).ownerOf(777), bob);
+        assertEq(collection1, collection2);
+    }
+
+    function test_withdrawTokensERC721StarknetWithdrawDeployDifferentCollection() public {
+        felt252 header = Protocol.requestHeaderV1(CollectionType.ERC721, false, false);
+        Request memory req = buildRequestDeploy(header, 888, bob);
+        uint256[] memory reqSerialized = Protocol.requestSerialize(req);
+        bytes32 msgHash = computeMessageHashFromL2(reqSerialized);
+
+        // The message must be simulated to come from starknet verifier contract
+        // on L1 and pushed to starknet core.
+        uint256[] memory msgHashes = new uint256[](1);
+        msgHashes[0] = uint256(msgHash);
+        IStarknetMessagingLocal(snCore).addMessageHashesFromL2(msgHashes);
+        address collection1 = IStarklane(bridge).withdrawTokens(reqSerialized);
+
+        assertEq(IERC721(collection1).ownerOf(888), bob);
+        // Error message from Starknet Core expected.
+        vm.expectRevert(bytes("INVALID_MESSAGE_TO_CONSUME"));
+        IStarklane(bridge).withdrawTokens(reqSerialized);
+
+        req.tokenIds[0] = 777;
+        req.collectionL2 = Cairo.snaddressWrap(0x456);
+        reqSerialized = Protocol.requestSerialize(req);
+        msgHash = computeMessageHashFromL2(reqSerialized);
+
+        msgHashes[0] = uint256(msgHash);
+        IStarknetMessagingLocal(snCore).addMessageHashesFromL2(msgHashes);
+        address collection2 = IStarklane(bridge).withdrawTokens(reqSerialized);
+
+        assertEq(IERC721(collection2).ownerOf(777), bob);
+        assertFalse(collection1 == collection2);
+    }
+
+    function test_depositWithdrawTokens_withMapping() public {
+        // add mapping L1 <-> L2: erc721C1 <-> 0x123
+        IStarklane(bridge).setL1L2CollectionMapping(address(erc721C1), Cairo.snaddressWrap(0x123), true);
+
+        // alice deposit token 0 and 9 of collection erc721C1 to bridge
+        test_depositTokenERC721();
+
+        // Build the request and compute it's "would be" message hash.
+        felt252 header = Protocol.requestHeaderV1(CollectionType.ERC721, false, false);
+        Request memory req = buildRequestDeploy(header, 9, bob);
+        req.collectionL1 = address(erc721C1);
+        uint256[] memory reqSerialized = Protocol.requestSerialize(req);
+        bytes32 msgHash = computeMessageHashFromL2(reqSerialized);
+
+        // The message must be simulated to come from starknet verifier contract
+        // on L1 and pushed to starknet core.
+        uint256[] memory hashes = new uint256[](1);
+        hashes[0] = uint256(msgHash);
+        IStarknetMessagingLocal(snCore).addMessageHashesFromL2(hashes);
+        address collection = IStarklane(bridge).withdrawTokens(reqSerialized);
+
+        // TODO: add verification of event emission.
+        assertEq(collection, erc721C1);
+        assertEq(IERC721(erc721C1).ownerOf(9), bob);
 
         // Error message from Starknet Core expected.
         vm.expectRevert(bytes("INVALID_MESSAGE_TO_CONSUME"));
