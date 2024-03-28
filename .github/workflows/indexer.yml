@@ -1,9 +1,9 @@
-name: Indexer
+name: Bridge Indexer
 
 on:
-  workflow_dispatch:
   push:
     paths: "apps/indexer/**"
+  workflow_dispatch:
 
 jobs:
   build-and-push:
