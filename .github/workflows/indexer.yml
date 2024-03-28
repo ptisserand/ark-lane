@@ -32,4 +32,4 @@ jobs:
           file: apps/indexer/Dockerfile
           tags: ghcr.io/${{ github.repository }}:latest
           build-args: |
-            "GIT_HASH=${{ GITHUB_SHA }}"
+            "GIT_HASH=$GITHUB_SHA"
